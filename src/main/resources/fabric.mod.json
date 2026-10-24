@@ -3,6 +3,7 @@
   "id": "kestrel",
   "version": "${version}",
   "name": "Kestrel",
+  "icon": "assets/kestrel/icon.png",
   "description": "Client-side performance toolkit with entity and particle controls, an FPS governor, video presets, and a performance HUD.",
   "license": "MIT",
   "environment": "client",
