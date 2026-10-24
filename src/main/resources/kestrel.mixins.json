@@ -1,0 +1,22 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.kestrel.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "BlockEntityRenderDispatcherMixin",
+    "ClientLevelExplosionMixin",
+    "ClientLevelSoundMixin",
+    "ClientLevelTickMixin",
+    "EntityRendererMixin",
+    "MinecraftMixin",
+    "OptionsScreenMixin",
+    "PauseScreenMixin",
+    "SingleQuadParticleMixin",
+    "TextureAtlasMixin",
+    "TitleScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

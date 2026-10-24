@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kestrel-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 9.5.0
+
+      - name: Choose release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          current_version="$(sed -n 's/^mod_version=//p' gradle.properties | head -n 1)"
+          release_tags="$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')"
+          version="$(CURRENT_MOD_VERSION="$current_version" RELEASE_TAGS="$release_tags" python3 - <<'PY'
+          import os
+          import re
+
+          current = os.environ["CURRENT_MOD_VERSION"].strip()
+          if "+" not in current:
+              raise SystemExit("mod_version must include the Minecraft version, for example 1.0.0+26.3")
+
+          current_base, minecraft_version = current.rsplit("+", 1)
+
+          def parse(value):
+              match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+              return tuple(map(int, match.groups())) if match else None
+
+          base = parse(current_base)
+          if base is None:
+              raise SystemExit(f"Invalid mod version: {current}")
+
+          matching = []
+          suffix = "+" + minecraft_version
+          for raw_tag in os.environ.get("RELEASE_TAGS", "").splitlines():
+              tag = raw_tag.strip()
+              if tag.startswith("v"):
+                  tag = tag[1:]
+              if tag.endswith(suffix):
+                  parsed = parse(tag[:-len(suffix)])
+                  if parsed is not None:
+                      matching.append(parsed)
+
+          latest = max(matching) if matching else None
+          if latest is None or base > latest:
+              next_version = base
+          else:
+              next_version = (latest[0], latest[1], latest[2] + 1)
+
+          print(".".join(map(str, next_version)) + suffix)
+          PY
+          )"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building Kestrel $version"
+
+      - name: Build mod
+        run: gradle build --no-daemon "-Pmod_version=${{ steps.version.outputs.version }}"
+
+      - name: Check release JAR
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: test -f "build/libs/kestrel-${RELEASE_VERSION}.jar"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          jar="build/libs/kestrel-${RELEASE_VERSION}.jar"
+          gh release create "v${RELEASE_VERSION}" "$jar" \
+            --target "$SOURCE_SHA" \
+            --title "Kestrel ${RELEASE_VERSION}" \
+            --generate-notes
+
+      - name: Save release version in gradle.properties
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          sed -i "s/^mod_version=.*/mod_version=${RELEASE_VERSION}/" gradle.properties
+          if git diff --quiet -- gradle.properties; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle.properties
+          git commit -m "chore: update Kestrel version to ${RELEASE_VERSION} [skip ci]"
+          if ! git push origin "HEAD:${GITHUB_REF_NAME}"; then
+            echo "::warning::The release was published, but the version update could not be pushed to ${GITHUB_REF_NAME}. Check branch rules or push the gradle.properties change manually."
+          fi

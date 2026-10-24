@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "kestrel",
+  "version": "${version}",
+  "name": "Kestrel",
+  "description": "Client-side performance toolkit with entity and particle controls, an FPS governor, video presets, and a performance HUD.",
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.kestrel.KestrelClient"
+    ]
+  },
+  "mixins": [
+    "kestrel.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "fabric-api": "*",
+    "java": ">=25"
+  }
+}
